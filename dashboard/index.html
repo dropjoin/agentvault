@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentVault — Live Policy Dashboard (Arbitrum Sepolia)</title>
+<style>
+  :root{--bg:#0b0e14;--card:#131824;--line:#232b3d;--txt:#e8ecf4;--mut:#8b94a7;--acc:#4ade80;--warn:#fbbf24}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  .wrap{max-width:880px;margin:0 auto;padding:28px 18px 48px}
+  h1{font-size:26px;margin:0 0 4px} .sub{color:var(--mut);margin:0 0 22px;font-size:14px;line-height:1.5}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px} @media(max-width:640px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+  .card h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin:0 0 10px}
+  .kv{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--line);font-size:14px}
+  .kv:last-child{border-bottom:none} .kv b{font-weight:600;text-align:right;word-break:break-all}
+  .mono{font-family:ui-monospace,Menlo,monospace;font-size:12.5px}
+  .pill{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.05em;border-radius:999px;padding:3px 9px;border:1px solid var(--line)}
+  .ok{color:var(--acc);border-color:var(--acc)} .warn{color:var(--warn);border-color:var(--warn)}
+  .full{grid-column:1/-1} .err{color:#f87171;font-size:13px} a{color:#7dd3fc}
+  button{background:#1b2334;color:var(--txt);border:1px solid var(--line);border-radius:9px;padding:8px 14px;cursor:pointer;font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>AgentVault</h1>
+  <p class="sub">A policy-governed spending wallet for AI agents, live on Arbitrum Sepolia. The owner sets hard
+  on-chain rules; the agent key can only spend inside them. This page reads the deployed contract directly —
+  no backend. <button id="refresh">Refresh</button></p>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Vault (live from chain)</h2>
+      <div id="vault"><p class="sub">Loading…</p></div>
+    </div>
+    <div class="card">
+      <h2>Native token policy (ETH)</h2>
+      <div id="policy"><p class="sub">Loading…</p></div>
+    </div>
+    <div class="card full">
+      <h2>The demo that proves it</h2>
+      <p class="sub" style="margin:0">The demo agent tried two jobs. Job 1 paid the allowlisted service
+      <b>0.01 ETH</b> — inside policy, executed on-chain
+      (<a href="https://sepolia.arbiscan.io/tx/0x6fbe209b6096624bd3980b87c128dba244bf6005d90957e9772805c34597f75a" target="_blank" rel="noopener">tx on Arbiscan</a>).
+      Job 2 attempted <b>0.5 ETH</b> — the vault rejected it on-chain with <span class="mono">per-tx cap exceeded</span>,
+      even though the agent key was valid and the vault held the funds. That rejection is the product.</p>
+    </div>
+  </div>
+</div>
+<script>
+const RPCS = ["https://arbitrum-sepolia-rpc.publicnode.com","https://sepolia-rollup.arbitrum.io/rpc"];
+const VAULT = "0x0344c57616d0ff50608D85B1852C5e3E3C87d1C3";
+const SERVICE = "0xF04D8eA360eF3097E632a67F4b9a9B11523b3Dc1";
+const ZERO = "0000000000000000000000000000000000000000";
+const pad = a => a.toLowerCase().replace("0x","").padStart(64,"0");
+async function call(data){
+  let last;
+  for(const rpc of RPCS){
+    try{
+      const r = await fetch(rpc,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({jsonrpc:"2.0",id:1,method:"eth_call",params:[{to:VAULT,data},"latest"]})});
+      const j = await r.json();
+      if(j.result) return j.result;
+      last = j.error;
+    }catch(e){ last = e; }
+  }
+  throw last;
+}
+const addr = h => "0x" + h.slice(-40);
+const bool = h => BigInt(h) !== 0n;
+const eth = h => (Number(BigInt(h))/1e18) + " ETH";
+const word = (h,i) => "0x" + h.slice(2 + i*64, 2 + (i+1)*64);
+async function load(){
+  try{
+    const [owner, agent, frozen, bal, pol, allowed] = await Promise.all([
+      call("0x8da5cb5b"), call("0xf5ff5c76"), call("0x054f7d9c"),
+      call("0x70a08231" + ZERO), call("0x3791dc6a" + ZERO), call("0xdb846026" + pad(SERVICE))
+    ]);
+    document.getElementById("vault").innerHTML =
+      '<div class="kv"><span>Contract</span><b class="mono"><a href="https://sepolia.arbiscan.io/address/'+VAULT+'" target="_blank" rel="noopener">'+VAULT+'</a></b></div>'+
+      '<div class="kv"><span>Owner (human)</span><b class="mono">'+addr(owner)+'</b></div>'+
+      '<div class="kv"><span>Agent (hot key)</span><b class="mono">'+addr(agent)+'</b></div>'+
+      '<div class="kv"><span>Vault balance</span><b>'+eth(bal)+'</b></div>'+
+      '<div class="kv"><span>Agent status</span><b><span class="pill '+(bool(frozen)?"warn":"ok")+'">'+(bool(frozen)?"FROZEN":"ACTIVE")+'</span></b></div>'+
+      '<div class="kv"><span>Demo service allowlisted</span><b>'+(bool(allowed)?"yes":"no")+'</b></div>';
+    document.getElementById("policy").innerHTML =
+      '<div class="kv"><span>Per-transaction cap</span><b>'+eth(word(pol,0))+'</b></div>'+
+      '<div class="kv"><span>Daily cap</span><b>'+eth(word(pol,1))+'</b></div>'+
+      '<div class="kv"><span>Spent today</span><b>'+eth(word(pol,2))+'</b></div>'+
+      '<div class="kv"><span>Configured</span><b>'+(bool(word(pol,3))?"yes":"no")+'</b></div>';
+  }catch(e){
+    document.getElementById("vault").innerHTML = '<p class="err">Chain read failed — hit Refresh.</p>';
+    document.getElementById("policy").innerHTML = "";
+  }
+}
+document.getElementById("refresh").addEventListener("click", load);
+load();
+</script>
+</body>
+</html>

@@ -17,7 +17,7 @@ forge build --silent
 BYTECODE=$(python3 -c "import json;print(json.load(open('out/AgentVault.sol/AgentVault.json'))['bytecode']['object'])")
 ARGS=$(cast abi-encode "constructor(address)" "$AGENT_ADDRESS")
 echo "Deploying AgentVault (agent = $AGENT_ADDRESS)..."
-OUT=$(cast send --rpc-url "$RPC" --private-key "$PRIVATE_KEY" --create "${BYTECODE}${ARGS#0x}" --json)
+OUT=$(cast send --rpc-url "$RPC" --private-key "$PRIVATE_KEY" --legacy --gas-price 100000000 --create "${BYTECODE}${ARGS#0x}" --json)
 VAULT=$(echo "$OUT" | python3 -c "import json,sys;print(json.load(sys.stdin)['contractAddress'])")
 echo "VAULT=$VAULT"
 echo "VAULT_ADDRESS=$VAULT" >> .env

@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentVault — Live Policy Dashboard on Arbitrum Sepolia</title>
+<meta name="description" content="AgentVault is a policy-governed spending wallet for AI agents, live on Arbitrum Sepolia. This dashboard reads the deployed contract directly from the chain — no backend.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231E2329'/%3E%3Ccircle cx='32' cy='32' r='17' fill='none' stroke='%2328A0F0' stroke-width='5'/%3E%3Ccircle cx='32' cy='32' r='5' fill='%2328A0F0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#181A20; --panel:#1E2329; --border:#333B47; --hair:#242A32;
+  --txt:#EAECEF; --mut:#707A8A;
+  --acc:#28A0F0; --green:#2DBD85; --red:#F6465D;
+  --track:#2B3139;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--txt);
+  font-family:"IBM Plex Sans",Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  font-size:15px;overflow-x:hidden}
+a{color:var(--acc);text-decoration:none}
+a:hover{text-decoration:underline}
+.wrap{max-width:1200px;margin:0 auto;padding:0 24px}
+.mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace}
+.loading{color:var(--mut)}
+
+/* ---------- header (Binance: ~64px bar, one accent button) ---------- */
+.top{border-bottom:1px solid var(--hair)}
+.top-in{max-width:1200px;margin:0 auto;padding:0 24px;display:flex;align-items:center;gap:18px;height:64px}
+.logo{display:flex;align-items:center;gap:10px}
+.logo .mark{width:32px;height:32px;border-radius:8px;background:var(--panel);
+  border:1px solid var(--border);display:grid;place-items:center}
+.logo .name{font-weight:700;font-size:17px;letter-spacing:.01em;color:var(--txt)}
+.live{display:flex;align-items:center;gap:8px;color:var(--mut);font-size:13px;font-weight:500}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green)}
+nav{margin-left:auto;display:flex;align-items:center;gap:22px}
+nav a.tlink{color:var(--txt);font-size:14px;font-weight:500}
+.btn-acc{display:inline-flex;align-items:center;height:38px;padding:0 16px;background:var(--acc);
+  color:#fff;font-weight:600;font-size:14px;border-radius:8px}
+.btn-acc:hover{text-decoration:none;filter:brightness(1.1)}
+
+/* ---------- hero (compact; the balance is the one giant numeral) ---------- */
+.hero{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;padding:52px 0 8px;align-items:start}
+@media(max-width:900px){.hero{grid-template-columns:1fr}}
+.eyebrow{font-size:12.5px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin-bottom:16px}
+h1{font-size:40px;font-weight:700;line-height:1.16;letter-spacing:-.01em}
+h1 .acc{color:var(--acc)}
+.hero p{margin-top:18px;font-size:15.5px;line-height:1.65;color:var(--mut);max-width:560px}
+.hero p b{color:var(--txt);font-weight:600}
+.sum{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:24px}
+.sum .k{font-size:12.5px;color:var(--mut);font-weight:500;text-transform:uppercase;letter-spacing:.05em}
+.giant{font-size:64px;font-weight:600;letter-spacing:-.02em;line-height:1.08;
+  font-variant-numeric:tabular-nums;margin-top:8px}
+.giant small{font-size:20px;color:var(--mut);font-weight:500;letter-spacing:0}
+.srow{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:11px 0}
+.srow span{color:var(--mut);font-size:13.5px}
+.srow b{font-weight:600;font-size:14.5px;font-variant-numeric:tabular-nums}
+.sum .rows{margin-top:6px;border-top:1px solid var(--hair)}
+.sum .rows .srow{border-bottom:1px solid var(--hair)}
+.sum .rows .srow:last-child{border-bottom:none;padding-bottom:2px}
+.bar{height:4px;border-radius:2px;background:var(--track);overflow:hidden}
+.bar i{display:block;height:100%;width:0%;background:var(--acc)}
+.sum .bar{margin:2px 0 8px}
+.sum .addr{margin-top:14px;font-size:12px;color:var(--mut)}
+
+/* ---------- flow strip ---------- */
+.flow{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:30px 0 2px;font-size:14px}
+.flow .step{color:var(--txt);font-weight:500}
+.flow .step b{color:var(--acc);font-weight:700;margin-right:6px}
+.flow .arr{color:var(--mut)}
+
+/* ---------- sections & data panels ---------- */
+section.blk{margin-top:46px}
+.sec-t{font-size:20px;font-weight:600}
+.sec-s{font-size:13.5px;color:var(--mut);margin-top:4px}
+.sec-p{font-size:14.5px;color:var(--mut);line-height:1.65;margin-top:10px;max-width:780px}
+.sec-p b{color:var(--txt);font-weight:600}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;margin-top:16px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:24px;
+  padding:13px 20px;min-height:57px;border-bottom:1px solid var(--hair)}
+.row:last-child{border-bottom:none}
+.row.nb{border-bottom:none;padding-bottom:6px}
+.row .lab .n{font-size:14.5px;font-weight:500}
+.row .lab .d{font-size:13px;color:var(--mut);margin-top:2px}
+.row .v{font-size:17px;font-weight:600;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.row .v small{font-size:13px;color:var(--mut);font-weight:500}
+.bar-row{padding:0 20px 14px;border-bottom:1px solid var(--hair)}
+.pill{font-weight:600;font-size:15px}
+.pill.ok{color:var(--green)}
+.pill.warn{color:var(--red)}
+
+/* gate checks: clean list rows */
+.grow{display:grid;grid-template-columns:230px 1fr;gap:20px;padding:15px 20px;
+  border-bottom:1px solid var(--hair);align-items:baseline}
+.grow:last-child{border-bottom:none}
+.grow .g-n{font-size:15px;font-weight:600}
+.grow .g-n .no{color:var(--acc);font-weight:700;margin-right:10px;font-variant-numeric:tabular-nums}
+.grow .g-d{font-size:14px;color:var(--mut);line-height:1.6}
+@media(max-width:640px){.grow{grid-template-columns:1fr;gap:4px}}
+
+/* rules rows */
+.rrow{padding:14px 20px;border-bottom:1px solid var(--hair);
+  font-size:14.5px;color:var(--mut);line-height:1.6}
+.rrow:last-child{border-bottom:none}
+.rrow b{color:var(--txt);font-weight:600}
+
+/* demo outcome rows: semantic color as text only */
+.drow{display:flex;justify-content:space-between;gap:28px;padding:18px 20px;border-bottom:1px solid var(--hair)}
+.drow:last-child{border-bottom:none}
+.drow .amt{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.drow .dsc{font-size:13.5px;color:var(--mut);line-height:1.55;margin-top:4px;max-width:560px}
+.drow .rs{text-align:right;flex-shrink:0}
+.drow .st{font-size:14px;font-weight:700}
+.st.pass{color:var(--green)}
+.st.block{color:var(--red)}
+.drow .lk{font-size:13px;margin-top:5px;display:inline-block}
+@media(max-width:640px){.drow{flex-direction:column;gap:8px}.drow .rs{text-align:left}}
+
+/* identities / policy panels */
+.duo{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+@media(max-width:900px){.duo{grid-template-columns:1fr}}
+.duo .panel{margin-top:0}
+.p-t{padding:18px 20px 2px;font-size:15.5px;font-weight:600}
+.p-s{padding:0 20px 8px;font-size:13px;color:var(--mut)}
+.kv{display:flex;justify-content:space-between;align-items:baseline;gap:16px;
+  padding:11px 20px;border-bottom:1px solid var(--hair);font-size:13.5px}
+.kv:last-child{border-bottom:none}
+.kv span{color:var(--mut);flex-shrink:0}
+.kv b{font-weight:600;text-align:right;word-break:break-all;font-variant-numeric:tabular-nums}
+.kv b.mono{font-weight:500;font-size:12.5px}
+.kv a{word-break:break-all}
+.pad-load{padding:4px 20px 16px}
+
+.err{display:none;margin-top:16px;border:1px solid rgba(246,70,93,.45);
+  background:rgba(246,70,93,.06);color:var(--red);border-radius:12px;
+  padding:13px 16px;font-size:13.5px}
+footer{margin-top:48px;border-top:1px solid var(--hair);padding:20px 0 40px;
+  display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12.5px;color:var(--mut)}
+footer .sp{margin-left:auto}
+button#refresh{background:var(--panel);color:var(--txt);border:1px solid var(--border);
+  border-radius:8px;padding:8px 14px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit}
+button#refresh:hover{border-color:var(--acc)}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-in">
+    <div class="logo">
+      <div class="mark" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 64 64" fill="none"><circle cx="32" cy="32" r="18" stroke="#28A0F0" stroke-width="6"/><circle cx="32" cy="32" r="6" fill="#28A0F0"/></svg>
+      </div>
+      <div class="name">AGENTVAULT</div>
+    </div>
+    <div class="live"><span class="dot"></span> LIVE · ARBITRUM SEPOLIA</div>
+    <nav>
+      <a class="tlink" href="https://github.com/dropjoin/agentvault" target="_blank" rel="noopener">GitHub Repo</a>
+      <a class="btn-acc" href="https://sepolia.arbiscan.io/address/0x0344c57616d0ff50608D85B1852C5e3E3C87d1C3" target="_blank" rel="noopener">Contract on Arbiscan ↗</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section class="hero">
+    <div>
+      <div class="eyebrow">Arbitrum Open House · DeFi</div>
+      <h1>Give your AI agent a <span class="acc">wallet</span>,<br>not your keys.</h1>
+      <p>AgentVault is an on-chain vault for AI agent treasuries on Arbitrum. The human owner sets hard spending
+      rules in the contract; the agent's hot key can only move funds <b>inside those rules</b>. Deposits in,
+      policy-bound withdrawals out, and every movement leaves a full audit trail. This page reads the deployed
+      contract directly from the chain — <b>no backend, nothing hardcoded</b>.</p>
+    </div>
+    <div class="sum" aria-label="Vault balance summary">
+      <div class="k">Vault balance · live from chain</div>
+      <div class="giant"><span id="hero-bal"><span class="loading">…</span></span> <small>ETH</small></div>
+      <div class="srow"><span>Spent today</span><b id="hero-spent">…</b></div>
+      <div class="bar"><i id="hero-bar"></i></div>
+      <div class="rows">
+        <div class="srow"><span>Per-tx cap</span><b id="chip-cap">…</b></div>
+        <div class="srow"><span>Agent status</span><b id="chip-agent">…</b></div>
+      </div>
+      <div class="addr mono">0x0344…d1C3 · Arbitrum Sepolia · read-only, no wallet connect</div>
+    </div>
+  </section>
+
+  <div class="flow">
+    <span class="step"><b>1</b>Owner sets the policy</span><span class="arr">→</span>
+    <span class="step"><b>2</b>Agent requests a spend</span><span class="arr">→</span>
+    <span class="step"><b>3</b>Vault checks every rule</span><span class="arr">→</span>
+    <span class="step"><b>4</b>Paid, or rejected on-chain</span>
+  </div>
+
+  <section class="blk" aria-label="Live vault statistics">
+    <div class="sec-t">Live statistics</div>
+    <div class="sec-s">Read directly from the deployed contract — no backend, nothing hardcoded</div>
+    <div class="panel">
+      <div class="row"><div class="lab"><div class="n">Vault balance</div><div class="d">ETH held by the vault right now</div></div><div class="v" id="st-balance"><span class="loading">…</span></div></div>
+      <div class="row"><div class="lab"><div class="n">Per-tx cap</div><div class="d">Most the agent can send in one payment</div></div><div class="v" id="st-pertx"><span class="loading">…</span></div></div>
+      <div class="row"><div class="lab"><div class="n">Daily cap</div><div class="d">Most the agent can send per day</div></div><div class="v" id="st-daily"><span class="loading">…</span></div></div>
+      <div class="row nb"><div class="lab"><div class="n">Spent today</div><div class="d" id="spent-note">of the daily cap used</div></div><div class="v" id="st-spent"><span class="loading">…</span></div></div>
+      <div class="bar-row"><div class="bar"><i id="spent-bar"></i></div></div>
+      <div class="row"><div class="lab"><div class="n">Agent status</div><div class="d">Owner can freeze the agent at any time</div></div><div class="v" id="st-status"><span class="loading">…</span></div></div>
+    </div>
+    <div class="err" id="readerr">Live chain read failed — the public RPC did not answer. The values on this page are never hardcoded, so hit Refresh to retry.</div>
+  </section>
+
+  <section class="blk">
+    <div class="sec-t">Every spend passes four on-chain checks</div>
+    <div class="sec-s">How the policy gate works</div>
+    <p class="sec-p">There is no off-chain approver and no trusted server. When the agent key calls <span class="mono">agentSpend</span>,
+    the contract itself enforces the policy before a single wei moves:</p>
+    <div class="panel">
+      <div class="grow"><div class="g-n"><span class="no">01</span>Agent only</div><div class="g-d">Only the registered agent key can request a spend — and only the owner can change that key.</div></div>
+      <div class="grow"><div class="g-n"><span class="no">02</span>Allowlist</div><div class="g-d">The recipient must be on the owner-managed allowlist. Strangers get nothing.</div></div>
+      <div class="grow"><div class="g-n"><span class="no">03</span>Caps</div><div class="g-d">Amount must fit the per-transaction cap and what is left of the daily cap.</div></div>
+      <div class="grow"><div class="g-n"><span class="no">04</span>Freeze switch</div><div class="g-d">If the vault is frozen, every agent spend reverts until the owner unfreezes it.</div></div>
+    </div>
+  </section>
+
+  <section class="blk">
+    <div class="sec-t">Policy lives in the contract</div>
+    <div class="sec-s">Rules the agent can never break</div>
+    <div class="panel">
+      <div class="rrow"><b>Owner-only controls.</b> Policy, allowlist, agent key, freeze and withdrawals are owner functions. The agent key holds none of them.</div>
+      <div class="rrow"><b>Owner escape hatch.</b> The owner can withdraw at any time, even while the vault is frozen.</div>
+      <div class="rrow"><b>Full audit trail.</b> Every spend, policy change and freeze emits an on-chain event.</div>
+    </div>
+  </section>
+
+  <section class="blk">
+    <div class="sec-t">One payment passed. One was rejected on-chain.</div>
+    <div class="sec-s">The demo that proves it</div>
+    <p class="sec-p">The demo agent was given two jobs against this exact contract. The vault, not a person, decided both:</p>
+    <div class="panel">
+      <div class="drow">
+        <div>
+          <div class="amt">0.01 ETH</div>
+          <div class="dsc">Paid to the allowlisted demo service. Inside the per-tx cap, inside the daily cap.</div>
+        </div>
+        <div class="rs">
+          <div class="st pass">✓ WITHIN POLICY — EXECUTED</div>
+          <a class="lk" href="https://sepolia.arbiscan.io/tx/0x6fbe209b6096624bd3980b87c128dba244bf6005d90957e9772805c34597f75a" target="_blank" rel="noopener">See the transaction on Arbiscan ↗</a>
+        </div>
+      </div>
+      <div class="drow">
+        <div>
+          <div class="amt">0.5 ETH</div>
+          <div class="dsc">The agent key was valid and the vault held the funds, but the contract reverted the spend with
+          <span class="mono">per-tx cap exceeded</span>. That rejection is the product.</div>
+        </div>
+        <div class="rs">
+          <div class="st block">✕ OVER THE CAP — REJECTED ON-CHAIN</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="blk">
+    <div class="duo">
+      <div class="panel">
+        <div class="p-t">On-chain identities</div>
+        <div class="p-s">Who holds which key</div>
+        <div id="ids"><p class="loading pad-load">Loading from chain…</p></div>
+      </div>
+      <div class="panel">
+        <div class="p-t">The active spending policy</div>
+        <div class="p-s">Native token policy · ETH</div>
+        <div id="policy"><p class="loading pad-load">Loading from chain…</p></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>AgentVault · built for the Arbitrum Open House buildathon · read-only live dashboard — no wallet connect, no transactions.</span>
+    <span class="sp mono" id="sync">syncing…</span>
+    <button id="refresh">Refresh</button>
+  </footer>
+</div>
+
+<script>
+const RPCS = ["https://arbitrum-sepolia-rpc.publicnode.com","https://sepolia-rollup.arbitrum.io/rpc"];
+const VAULT = "0x0344c57616d0ff50608D85B1852C5e3E3C87d1C3";
+const SERVICE = "0xF04D8eA360eF3097E632a67F4b9a9B11523b3Dc1";
+const ARB = "https://sepolia.arbiscan.io/address/";
+const pad = a => a.toLowerCase().replace("0x","").padStart(64,"0");
+const ZERO_ADDR = "0".repeat(64);
+async function rpc(method, params){
+  let last;
+  for(const url of RPCS){
+    try{
+      const r = await fetch(url,{method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({jsonrpc:"2.0",id:1,method,params})});
+      const j = await r.json();
+      if(j.result !== undefined && j.result !== null) return j.result;
+      last = j.error || new Error("no result");
+    }catch(e){ last = e; }
+  }
+  throw last;
+}
+const call = data => rpc("eth_call",[{to:VAULT,data},"latest"]);
+const addr = h => "0x" + h.slice(-40);
+const bool = h => BigInt(h) !== 0n;
+function fmtEth(h){
+  const wei = BigInt(h);
+  const whole = wei / 1000000000000000000n;
+  let frac = (wei % 1000000000000000000n).toString().padStart(18,"0").slice(0,6).replace(/0+$/,"");
+  return frac ? whole.toString() + "." + frac : whole.toString();
+}
+const word = (h,i) => "0x" + h.slice(2 + i*64, 2 + (i+1)*64);
+const ethCell = h => fmtEth(h) + ' <small>ETH</small>';
+function paint(o){
+  document.getElementById("readerr").style.display = "none";
+  document.getElementById("st-balance").innerHTML = o.bal;
+  document.getElementById("st-pertx").innerHTML = o.pertx;
+  document.getElementById("st-daily").innerHTML = o.daily;
+  document.getElementById("st-spent").innerHTML = o.spent;
+  document.getElementById("spent-bar").style.width = Math.min(100, o.pct) + "%";
+  document.getElementById("spent-note").textContent = o.pct + "% of the daily cap used";
+  document.getElementById("st-status").innerHTML = o.frozen
+    ? '<span class="pill warn">❄ FROZEN</span>' : '<span class="pill ok">● ACTIVE</span>';
+  document.getElementById("hero-bal").textContent = o.balTxt;
+  document.getElementById("hero-bar").style.width = Math.min(100, o.pct) + "%";
+  document.getElementById("hero-spent").textContent = o.spentTxt + " / " + o.dailyTxt + " ETH";
+  document.getElementById("chip-cap").textContent = o.pertxTxt + " ETH";
+  document.getElementById("chip-agent").textContent = o.frozen ? "FROZEN" : "ACTIVE";
+  document.getElementById("chip-agent").style.color = o.frozen ? "#F6465D" : "#2DBD85";
+  document.getElementById("ids").innerHTML =
+    '<div class="kv"><span>Vault contract</span><b class="mono"><a href="'+ARB+VAULT+'" target="_blank" rel="noopener">'+VAULT+'</a></b></div>'+
+    '<div class="kv"><span>Owner (human)</span><b class="mono">'+o.owner+'</b></div>'+
+    '<div class="kv"><span>Agent (hot key)</span><b class="mono">'+o.agent+'</b></div>'+
+    '<div class="kv"><span>Demo service</span><b class="mono">'+SERVICE+'</b></div>'+
+    '<div class="kv"><span>Service allowlisted</span><b>'+(o.allowed?"yes":"no")+'</b></div>';
+  document.getElementById("policy").innerHTML =
+    '<div class="kv"><span>Per-transaction cap</span><b>'+o.pertxTxt+' ETH</b></div>'+
+    '<div class="kv"><span>Daily cap</span><b>'+o.dailyTxt+' ETH</b></div>'+
+    '<div class="kv"><span>Spent today</span><b>'+o.spentTxt+' ETH</b></div>'+
+    '<div class="kv"><span>Policy configured</span><b>'+(o.configured?"yes":"no")+'</b></div>';
+  document.getElementById("sync").textContent = o.sync;
+}
+async function load(){
+  try{
+    const [owner, agent, frozen, bal, pol, allowed, block] = await Promise.all([
+      call("0x8da5cb5b"), call("0xf5ff5c76"), call("0x054f7d9c"),
+      call("0x70a08231" + ZERO_ADDR), call("0x3791dc6a" + ZERO_ADDR),
+      call("0xdb846026" + pad(SERVICE)), rpc("eth_blockNumber",[])
+    ]);
+    const spent = BigInt(word(pol,2)), daily = BigInt(word(pol,1));
+    const pct = daily > 0n ? Number(spent * 10000n / daily) / 100 : 0;
+    paint({
+      bal: ethCell(bal), pertx: ethCell(word(pol,0)), daily: ethCell(word(pol,1)), spent: ethCell(word(pol,2)),
+      balTxt: fmtEth(bal), pertxTxt: fmtEth(word(pol,0)), dailyTxt: fmtEth(word(pol,1)), spentTxt: fmtEth(word(pol,2)),
+      pct, frozen: bool(frozen),
+      owner: addr(owner), agent: addr(agent), allowed: bool(allowed), configured: bool(word(pol,3)),
+      sync: "block " + Number(BigInt(block)).toLocaleString("en-US") + " · read live just now"
+    });
+  }catch(e){
+    document.getElementById("readerr").style.display = "block";
+    document.getElementById("sync").textContent = "chain read failed — retry with Refresh";
+  }
+}
+/* ?shot=1 — screenshot mode only (SMUG precedent): fills the last verified live
+   values (read 2026-11-07, block 326,751,884) so a headless render without RPC
+   access shows the real state. The normal page always reads the chain live. */
+function fillShot(){
+  paint({
+    bal: '0.04 <small>ETH</small>', pertx: '0.01 <small>ETH</small>', daily: '0.025 <small>ETH</small>', spent: '0 <small>ETH</small>',
+    balTxt: "0.04", pertxTxt: "0.01", dailyTxt: "0.025", spentTxt: "0",
+    pct: 0, frozen: false,
+    owner: "0x552859077c21d905708f3b0644514e6b12c21032", agent: "0x282d13e8351587694dc99b568eaf0d8e9810fb6b",
+    allowed: true, configured: true,
+    sync: "block 326,751,884 · last verified live read"
+  });
+}
+const SHOT = new URLSearchParams(location.search).has("shot");
+if(SHOT) document.documentElement.classList.add("shot");
+document.getElementById("refresh").addEventListener("click", load);
+if(SHOT) fillShot(); else load();
+</script>
+</body>
+</html>

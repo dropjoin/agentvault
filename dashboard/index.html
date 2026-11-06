@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentVault — Live Policy Dashboard on Arbitrum Sepolia</title>
+<meta name="description" content="AgentVault is a policy-governed spending wallet for AI agents, live on Arbitrum Sepolia. This dashboard reads the deployed contract directly from the chain — no backend.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230A1830'/%3E%3Ccircle cx='32' cy='32' r='17' fill='none' stroke='%2328A0F0' stroke-width='5'/%3E%3Ccircle cx='32' cy='32' r='5' fill='%237DD3FC'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800;900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#04101F; --bg2:#071A33; --panel:#0A1E3A; --panel2:#0D2547;
+  --line:rgba(125,211,252,.16); --line2:rgba(125,211,252,.08);
+  --txt:#EDF5FF; --mut:#9DB4D4; --dim:#6E87AC;
+  --blue:#28A0F0; --sky:#7DD3FC; --cyan:#22D3EE; --deep:#0B3B66;
+  --green:#34D399; --red:#FB7185; --amber:#FBBF24;
+  --grad:linear-gradient(92deg,#28A0F0 0%,#22D3EE 55%,#7DD3FC 100%);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:
+  radial-gradient(1100px 520px at 85% -120px, rgba(40,160,240,.28), transparent 60%),
+  radial-gradient(900px 480px at -10% 30%, rgba(34,211,238,.12), transparent 55%),
+  linear-gradient(180deg,#050F20 0%,#04101F 40%,#030B17 100%);
+  color:var(--txt);font-family:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow-x:hidden}
+a{color:var(--sky);text-decoration:none}
+a:hover{text-decoration:underline}
+.wrap{max-width:1180px;margin:0 auto;padding:0 22px 64px}
+.mono{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace}
+
+/* ---------- header ---------- */
+header{display:flex;align-items:center;gap:14px;padding:22px 0 8px;flex-wrap:wrap}
+.logo{display:flex;align-items:center;gap:12px}
+.logo .mark{width:44px;height:44px;border-radius:12px;background:linear-gradient(145deg,#0D2B52,#081A33);
+  border:1px solid var(--line);display:grid;place-items:center;box-shadow:0 8px 24px rgba(40,160,240,.25)}
+.logo .name{font-family:"Archivo",sans-serif;font-weight:900;font-size:22px;letter-spacing:.01em}
+.logo .name span{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.livebadge{margin-left:6px;display:inline-flex;align-items:center;gap:8px;font-size:11px;font-weight:700;
+  letter-spacing:.14em;color:var(--sky);border:1px solid var(--line);border-radius:999px;padding:6px 12px;background:rgba(40,160,240,.08)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(52,211,153,.6);animation:pulse 2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,.55)}70%{box-shadow:0 0 0 9px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
+nav{margin-left:auto;display:flex;gap:10px;flex-wrap:wrap}
+nav a{font-size:13px;font-weight:600;color:var(--txt);border:1px solid var(--line);border-radius:999px;
+  padding:8px 14px;background:rgba(10,30,58,.6)}
+nav a:hover{border-color:var(--blue);text-decoration:none}
+
+/* ---------- hero ---------- */
+.hero{padding:52px 0 30px;max-width:860px}
+.eyebrow{font-size:12px;font-weight:700;letter-spacing:.22em;color:var(--cyan);text-transform:uppercase;margin-bottom:18px}
+h1{font-family:"Archivo",sans-serif;font-weight:900;font-size:clamp(40px,6.4vw,68px);line-height:1.02;letter-spacing:-.01em}
+h1 .grad{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero p{margin-top:20px;font-size:17px;line-height:1.65;color:var(--mut);max-width:640px}
+.hero p b{color:var(--txt)}
+.cta{display:flex;gap:12px;margin-top:28px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:14px;border-radius:12px;padding:13px 20px}
+.btn.primary{background:var(--grad);color:#03182B;box-shadow:0 10px 30px rgba(40,160,240,.35)}
+.btn.primary:hover{text-decoration:none;filter:brightness(1.08)}
+.btn.ghost{border:1px solid var(--line);color:var(--txt);background:rgba(10,30,58,.55)}
+.btn.ghost:hover{text-decoration:none;border-color:var(--blue)}
+.flow{display:flex;align-items:center;gap:10px;margin-top:36px;flex-wrap:wrap;font-size:12.5px;font-weight:600;color:var(--mut)}
+.flow .step{border:1px solid var(--line2);background:rgba(10,30,58,.55);border-radius:999px;padding:7px 13px}
+.flow .step b{color:var(--sky)}
+.flow .arr{color:var(--blue);font-weight:800}
+
+/* ---------- stats band ---------- */
+.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-top:14px}
+@media(max-width:1020px){.stats{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:640px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{position:relative;background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);
+  border-radius:18px;padding:20px 18px 18px;overflow:hidden}
+.stat::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:var(--grad);opacity:.9}
+.stat .k{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+.stat .v{font-family:"Archivo",sans-serif;font-weight:800;font-size:clamp(24px,2.6vw,32px);margin-top:9px;font-variant-numeric:tabular-nums}
+.stat .v small{font-size:14px;font-weight:700;color:var(--sky)}
+.stat .s{font-size:12px;color:var(--mut);margin-top:5px;line-height:1.45}
+.bar{height:7px;border-radius:99px;background:rgba(125,211,252,.14);margin-top:11px;overflow:hidden}
+.bar i{display:block;height:100%;width:0%;border-radius:99px;background:var(--grad);transition:width .8s ease}
+.pill{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:800;letter-spacing:.08em;
+  border-radius:999px;padding:5px 12px;border:1px solid}
+.pill.ok{color:var(--green);border-color:rgba(52,211,153,.5);background:rgba(52,211,153,.08)}
+.pill.warn{color:var(--amber);border-color:rgba(251,191,36,.5);background:rgba(251,191,36,.08)}
+
+/* ---------- bento ---------- */
+.bento{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;margin-top:14px}
+.card{background:linear-gradient(180deg,rgba(13,37,71,.85),rgba(10,30,58,.9));border:1px solid var(--line);
+  border-radius:20px;padding:26px;position:relative;overflow:hidden}
+.card::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:var(--grad);opacity:.55}
+.card h2{font-family:"Archivo",sans-serif;font-weight:800;font-size:21px;margin-bottom:8px}
+.card h3{font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--cyan);margin-bottom:12px}
+.card p{font-size:14.5px;line-height:1.65;color:var(--mut)}
+.card p b,.card li b{color:var(--txt)}
+.span7{grid-column:span 7}.span5{grid-column:span 5}.span6{grid-column:span 6}.span12{grid-column:span 12}
+@media(max-width:900px){.span7,.span5,.span6{grid-column:span 12}}
+.gate{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:18px}
+@media(max-width:640px){.gate{grid-template-columns:repeat(2,1fr)}}
+.gate .g{border:1px solid var(--line2);background:rgba(4,16,31,.5);border-radius:14px;padding:14px 13px}
+.gate .n{font-family:"Archivo",sans-serif;font-weight:900;font-size:19px;color:var(--blue)}
+.gate .t{font-weight:700;font-size:13px;margin:5px 0 4px}
+.gate .d{font-size:12px;color:var(--mut);line-height:1.5}
+.outcomes{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px}
+@media(max-width:640px){.outcomes{grid-template-columns:1fr}}
+.outcome{border-radius:16px;padding:18px;border:1px solid}
+.outcome.pass{background:rgba(52,211,153,.07);border-color:rgba(52,211,153,.4)}
+.outcome.block{background:rgba(251,113,133,.07);border-color:rgba(251,113,133,.4)}
+.outcome .tag{font-size:11px;font-weight:800;letter-spacing:.14em}
+.outcome.pass .tag{color:var(--green)} .outcome.block .tag{color:var(--red)}
+.outcome .amt{font-family:"Archivo",sans-serif;font-weight:900;font-size:30px;margin:7px 0 5px}
+.outcome p{font-size:13px}
+.kv{display:flex;justify-content:space-between;gap:14px;padding:9px 0;border-bottom:1px solid var(--line2);font-size:13.5px}
+.kv:last-child{border-bottom:none}
+.kv span{color:var(--mut)} .kv b{font-weight:600;text-align:right;word-break:break-all}
+.kv a{word-break:break-all}
+ul.rules{list-style:none;margin-top:4px}
+ul.rules li{padding:9px 0 9px 26px;position:relative;font-size:14px;color:var(--mut);line-height:1.55;border-bottom:1px solid var(--line2)}
+ul.rules li:last-child{border-bottom:none}
+ul.rules li::before{content:"";position:absolute;left:2px;top:15px;width:9px;height:9px;border-radius:3px;background:var(--grad)}
+.err{display:none;margin-top:14px;border:1px solid rgba(251,113,133,.5);background:rgba(251,113,133,.08);
+  color:#FDA4AF;border-radius:14px;padding:13px 16px;font-size:13.5px}
+footer{margin-top:34px;border-top:1px solid var(--line2);padding-top:22px;display:flex;gap:14px;flex-wrap:wrap;
+  align-items:center;font-size:12.5px;color:var(--dim)}
+footer .sp{margin-left:auto}
+button#refresh{background:rgba(40,160,240,.12);color:var(--sky);border:1px solid var(--line);border-radius:10px;
+  padding:8px 15px;cursor:pointer;font-size:12.5px;font-weight:700;font-family:inherit}
+button#refresh:hover{border-color:var(--blue)}
+.reveal{opacity:0;transform:translateY(16px);transition:opacity .6s ease,transform .6s ease}
+.reveal.in{opacity:1;transform:none}
+.shot .reveal{opacity:1;transform:none;transition:none}
+.shot .dot{animation:none}
+.loading{color:var(--dim)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="logo">
+      <div class="mark" aria-hidden="true">
+        <svg width="26" height="26" viewBox="0 0 64 64" fill="none"><circle cx="32" cy="32" r="18" stroke="#28A0F0" stroke-width="5"/><circle cx="32" cy="32" r="5.5" fill="#7DD3FC"/><path d="M32 6v10M32 48v10M6 32h10M48 32h10" stroke="#22D3EE" stroke-width="5" stroke-linecap="round"/></svg>
+      </div>
+      <div class="name">AGENT<span>VAULT</span></div>
+    </div>
+    <div class="livebadge"><span class="dot"></span> LIVE · ARBITRUM SEPOLIA</div>
+    <nav>
+      <a href="https://sepolia.arbiscan.io/address/0x0344c57616d0ff50608D85B1852C5e3E3C87d1C3" target="_blank" rel="noopener">Contract on Arbiscan ↗</a>
+      <a href="https://github.com/dropjoin/agentvault" target="_blank" rel="noopener">GitHub Repo ↗</a>
+    </nav>
+  </header>
+
+  <section class="hero reveal">
+    <div class="eyebrow">Arbitrum Open House · DeFi</div>
+    <h1>Give your AI agent a wallet,<br><span class="grad">not your keys.</span></h1>
+    <p>AgentVault is an on-chain vault for AI agent treasuries on Arbitrum. The human owner sets hard spending
+    rules in the contract; the agent's hot key can only move funds <b>inside those rules</b>. Deposits in,
+    policy-bound withdrawals out, and every movement leaves a full audit trail. This page reads the deployed
+    contract directly from the chain — <b>no backend, nothing hardcoded</b>.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://sepolia.arbiscan.io/address/0x0344c57616d0ff50608D85B1852C5e3E3C87d1C3" target="_blank" rel="noopener">View the live contract</a>
+      <a class="btn ghost" href="https://github.com/dropjoin/agentvault" target="_blank" rel="noopener">Read the source</a>
+    </div>
+    <div class="flow">
+      <span class="step"><b>1</b> · Owner sets the policy</span><span class="arr">→</span>
+      <span class="step"><b>2</b> · Agent requests a spend</span><span class="arr">→</span>
+      <span class="step"><b>3</b> · Vault checks every rule</span><span class="arr">→</span>
+      <span class="step"><b>4</b> · Paid, or rejected on-chain</span>
+    </div>
+  </section>
+
+  <section class="stats reveal" aria-label="Live vault statistics">
+    <div class="stat"><div class="k">Vault balance</div><div class="v" id="st-balance"><span class="loading">…</span></div><div class="s">ETH held by the vault right now</div></div>
+    <div class="stat"><div class="k">Per-tx cap</div><div class="v" id="st-pertx"><span class="loading">…</span></div><div class="s">Most the agent can send in one payment</div></div>
+    <div class="stat"><div class="k">Daily cap</div><div class="v" id="st-daily"><span class="loading">…</span></div><div class="s">Most the agent can send per day</div></div>
+    <div class="stat"><div class="k">Spent today</div><div class="v" id="st-spent"><span class="loading">…</span></div><div class="bar"><i id="spent-bar"></i></div><div class="s" id="spent-note">of the daily cap used</div></div>
+    <div class="stat"><div class="k">Agent status</div><div class="v" id="st-status" style="font-size:21px;padding-top:5px"><span class="loading">…</span></div><div class="s">Owner can freeze the agent at any time</div></div>
+  </section>
+  <div class="err" id="readerr">Live chain read failed — the public RPC did not answer. The values on this page are never hardcoded, so hit Refresh to retry.</div>
+
+  <section class="bento">
+    <div class="card span7 reveal">
+      <h3>How the policy gate works</h3>
+      <h2>Every spend passes four on-chain checks</h2>
+      <p>There is no off-chain approver and no trusted server. When the agent key calls <span class="mono">agentSpend</span>,
+      the contract itself enforces the policy before a single wei moves:</p>
+      <div class="gate">
+        <div class="g"><div class="n">01</div><div class="t">Agent only</div><div class="d">Only the registered agent key can request a spend — and only the owner can change that key.</div></div>
+        <div class="g"><div class="n">02</div><div class="t">Allowlist</div><div class="d">The recipient must be on the owner-managed allowlist. Strangers get nothing.</div></div>
+        <div class="g"><div class="n">03</div><div class="t">Caps</div><div class="d">Amount must fit the per-transaction cap and what is left of the daily cap.</div></div>
+        <div class="g"><div class="n">04</div><div class="t">Freeze switch</div><div class="d">If the vault is frozen, every agent spend reverts until the owner unfreezes it.</div></div>
+      </div>
+    </div>
+
+    <div class="card span5 reveal">
+      <h3>Rules the agent can never break</h3>
+      <h2>Policy lives in the contract</h2>
+      <ul class="rules">
+        <li><b>Owner-only controls.</b> Policy, allowlist, agent key, freeze and withdrawals are owner functions. The agent key holds none of them.</li>
+        <li><b>Owner escape hatch.</b> The owner can withdraw at any time, even while the vault is frozen.</li>
+        <li><b>Full audit trail.</b> Every spend, policy change and freeze emits an on-chain event.</li>
+      </ul>
+    </div>
+
+    <div class="card span12 reveal">
+      <h3>The demo that proves it</h3>
+      <h2>One payment passed. One was rejected on-chain.</h2>
+      <p>The demo agent was given two jobs against this exact contract. The vault, not a person, decided both:</p>
+      <div class="outcomes">
+        <div class="outcome pass">
+          <div class="tag">✓ WITHIN POLICY — EXECUTED</div>
+          <div class="amt">0.01 ETH</div>
+          <p>Paid to the allowlisted demo service. Inside the per-tx cap, inside the daily cap —
+          <a href="https://sepolia.arbiscan.io/tx/0x6fbe209b6096624bd3980b87c128dba244bf6005d90957e9772805c34597f75a" target="_blank" rel="noopener">see the transaction on Arbiscan ↗</a></p>
+        </div>
+        <div class="outcome block">
+          <div class="tag">✕ OVER THE CAP — REJECTED ON-CHAIN</div>
+          <div class="amt">0.5 ETH</div>
+          <p>The agent key was valid and the vault held the funds, but the contract reverted the spend with
+          <span class="mono">per-tx cap exceeded</span>. That rejection is the product.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card span6 reveal">
+      <h3>On-chain identities</h3>
+      <h2>Who holds which key</h2>
+      <div id="ids"><p class="loading" style="color:var(--dim);font-size:13.5px">Loading from chain…</p></div>
+    </div>
+
+    <div class="card span6 reveal">
+      <h3>Native token policy · ETH</h3>
+      <h2>The active spending policy</h2>
+      <div id="policy"><p class="loading" style="color:var(--dim);font-size:13.5px">Loading from chain…</p></div>
+    </div>
+  </section>
+
+  <footer>
+    <span>AgentVault · built for the Arbitrum Open House buildathon · read-only live dashboard — no wallet connect, no transactions.</span>
+    <span class="sp mono" id="sync">syncing…</span>
+    <button id="refresh">Refresh</button>
+  </footer>
+</div>
+
+<script>
+const RPCS = ["https://arbitrum-sepolia-rpc.publicnode.com","https://sepolia-rollup.arbitrum.io/rpc"];
+const VAULT = "0x0344c57616d0ff50608D85B1852C5e3E3C87d1C3";
+const SERVICE = "0xF04D8eA360eF3097E632a67F4b9a9B11523b3Dc1";
+const ARB = "https://sepolia.arbiscan.io/address/";
+const pad = a => a.toLowerCase().replace("0x","").padStart(64,"0");
+const ZERO_ADDR = "0".repeat(64);
+async function rpc(method, params){
+  let last;
+  for(const url of RPCS){
+    try{
+      const r = await fetch(url,{method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({jsonrpc:"2.0",id:1,method,params})});
+      const j = await r.json();
+      if(j.result !== undefined && j.result !== null) return j.result;
+      last = j.error || new Error("no result");
+    }catch(e){ last = e; }
+  }
+  throw last;
+}
+const call = data => rpc("eth_call",[{to:VAULT,data},"latest"]);
+const addr = h => "0x" + h.slice(-40);
+const bool = h => BigInt(h) !== 0n;
+function fmtEth(h){
+  const wei = BigInt(h);
+  const whole = wei / 1000000000000000000n;
+  let frac = (wei % 1000000000000000000n).toString().padStart(18,"0").slice(0,6).replace(/0+$/,"");
+  return frac ? whole.toString() + "." + frac : whole.toString();
+}
+const word = (h,i) => "0x" + h.slice(2 + i*64, 2 + (i+1)*64);
+const ethCell = h => fmtEth(h) + ' <small>ETH</small>';
+async function load(){
+  try{
+    const [owner, agent, frozen, bal, pol, allowed, block] = await Promise.all([
+      call("0x8da5cb5b"), call("0xf5ff5c76"), call("0x054f7d9c"),
+      call("0x70a08231" + ZERO_ADDR), call("0x3791dc6a" + ZERO_ADDR),
+      call("0xdb846026" + pad(SERVICE)), rpc("eth_blockNumber",[])
+    ]);
+    document.getElementById("readerr").style.display = "none";
+    document.getElementById("st-balance").innerHTML = ethCell(bal);
+    document.getElementById("st-pertx").innerHTML = ethCell(word(pol,0));
+    document.getElementById("st-daily").innerHTML = ethCell(word(pol,1));
+    document.getElementById("st-spent").innerHTML = ethCell(word(pol,2));
+    const spent = BigInt(word(pol,2)), daily = BigInt(word(pol,1));
+    const pct = daily > 0n ? Number(spent * 10000n / daily) / 100 : 0;
+    document.getElementById("spent-bar").style.width = Math.min(100, pct) + "%";
+    document.getElementById("spent-note").textContent = pct + "% of the daily cap used";
+    document.getElementById("st-status").innerHTML = bool(frozen)
+      ? '<span class="pill warn">❄ FROZEN</span>' : '<span class="pill ok">● ACTIVE</span>';
+    document.getElementById("ids").innerHTML =
+      '<div class="kv"><span>Vault contract</span><b class="mono"><a href="'+ARB+VAULT+'" target="_blank" rel="noopener">'+VAULT+'</a></b></div>'+
+      '<div class="kv"><span>Owner (human)</span><b class="mono">'+addr(owner)+'</b></div>'+
+      '<div class="kv"><span>Agent (hot key)</span><b class="mono">'+addr(agent)+'</b></div>'+
+      '<div class="kv"><span>Demo service</span><b class="mono">'+SERVICE+'</b></div>'+
+      '<div class="kv"><span>Service allowlisted</span><b>'+(bool(allowed)?"yes":"no")+'</b></div>';
+    document.getElementById("policy").innerHTML =
+      '<div class="kv"><span>Per-transaction cap</span><b>'+fmtEth(word(pol,0))+' ETH</b></div>'+
+      '<div class="kv"><span>Daily cap</span><b>'+fmtEth(word(pol,1))+' ETH</b></div>'+
+      '<div class="kv"><span>Spent today</span><b>'+fmtEth(word(pol,2))+' ETH</b></div>'+
+      '<div class="kv"><span>Policy configured</span><b>'+(bool(word(pol,3))?"yes":"no")+'</b></div>';
+    document.getElementById("sync").textContent = "block " + Number(BigInt(block)).toLocaleString("en-US") + " · read live just now";
+  }catch(e){
+    document.getElementById("readerr").style.display = "block";
+    document.getElementById("sync").textContent = "chain read failed — retry with Refresh";
+  }
+}
+document.getElementById("refresh").addEventListener("click", load);
+if(new URLSearchParams(location.search).has("shot")) document.documentElement.classList.add("shot");
+const io = new IntersectionObserver(es => es.forEach(e => { if(e.isIntersecting){ e.target.classList.add("in"); io.unobserve(e.target);} }), {threshold:.08});
+document.querySelectorAll(".reveal").forEach(el => io.observe(el));
+load();
+</script>
+</body>
+</html>

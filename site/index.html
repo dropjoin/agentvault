@@ -154,7 +154,7 @@ button#refresh:hover{border-color:var(--blue)}
     <p>AgentVault is an on-chain vault for AI agent treasuries on Arbitrum. The human owner sets hard spending
     rules in the contract; the agent's hot key can only move funds <b>inside those rules</b>. Deposits in,
     policy-bound withdrawals out, and every movement leaves a full audit trail. This page reads the deployed
-    contract directly from the chain — <b>no backend, nothing hardcoded</b>.</p>
+    contract directly from the chain — <b>no backend, every figure read live</b>.</p>
     <div class="cta">
       <a class="btn primary" href="https://sepolia.arbiscan.io/address/0x0344c57616d0ff50608D85B1852C5e3E3C87d1C3" target="_blank" rel="noopener">View the live contract</a>
       <a class="btn ghost" href="https://github.com/dropjoin/agentvault" target="_blank" rel="noopener">Read the source</a>
@@ -250,13 +250,16 @@ const ZERO_ADDR = "0".repeat(64);
 async function rpc(method, params){
   let last;
   for(const url of RPCS){
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10000);
     try{
-      const r = await fetch(url,{method:"POST",headers:{"content-type":"application/json"},
+      const r = await fetch(url,{method:"POST",headers:{"content-type":"application/json"},signal:ctrl.signal,
         body:JSON.stringify({jsonrpc:"2.0",id:1,method,params})});
       const j = await r.json();
       if(j.result !== undefined && j.result !== null) return j.result;
       last = j.error || new Error("no result");
     }catch(e){ last = e; }
+    finally{ clearTimeout(timer); }
   }
   throw last;
 }
@@ -266,7 +269,7 @@ const bool = h => BigInt(h) !== 0n;
 function fmtEth(h){
   const wei = BigInt(h);
   const whole = wei / 1000000000000000000n;
-  let frac = (wei % 1000000000000000000n).toString().padStart(18,"0").slice(0,6).replace(/0+$/,"");
+  let frac = (wei % 1000000000000000000n).toString().padStart(18,"0").replace(/0+$/,"");
   return frac ? whole.toString() + "." + frac : whole.toString();
 }
 const word = (h,i) => "0x" + h.slice(2 + i*64, 2 + (i+1)*64);

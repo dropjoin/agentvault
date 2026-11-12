@@ -17,6 +17,7 @@ interface IERC20 {
 ///      always withdraw everything. Token address(0) means the native coin.
 contract AgentVault {
     address public owner;
+    address public pendingOwner;
     address public agent;
     bool public frozen;
 
@@ -39,6 +40,7 @@ contract AgentVault {
     event AgentChanged(address indexed oldAgent, address indexed newAgent);
     event FrozenChanged(bool frozen);
     event OwnerChanged(address indexed oldOwner, address indexed newOwner);
+    event OwnershipTransferProposed(address indexed oldOwner, address indexed newOwner);
 
     bool private _locked;
 
@@ -74,6 +76,7 @@ contract AgentVault {
     function depositToken(address token, uint256 amount) external {
         require(token != address(0), "use plain transfer for native");
         require(amount > 0, "amount is zero");
+        _requireContract(token);
         _safeTransferFrom(token, msg.sender, address(this), amount);
         emit Deposited(token, msg.sender, amount);
     }
@@ -86,6 +89,7 @@ contract AgentVault {
         require(amount > 0, "amount is zero");
         require(to != address(0), "to is zero");
         require(allowedRecipient[to], "recipient not allowed");
+        if (token != address(0)) _requireContract(token);
 
         Policy storage p = _policies[token];
         require(p.configured, "token not allowed");
@@ -137,16 +141,29 @@ contract AgentVault {
         emit FrozenChanged(frozen_);
     }
 
+    /// @notice Propose a new owner. The transfer only takes effect when the
+    /// proposed owner calls acceptOwnership, so a mistyped address cannot
+    /// lock the vault. The owner can replace a pending proposal by calling
+    /// this again with a different address.
     function transferOwnership(address newOwner) external onlyOwner {
         require(newOwner != address(0), "owner is zero");
-        emit OwnerChanged(owner, newOwner);
-        owner = newOwner;
+        pendingOwner = newOwner;
+        emit OwnershipTransferProposed(owner, newOwner);
+    }
+
+    /// @notice The proposed owner accepts ownership of the vault.
+    function acceptOwnership() external {
+        require(msg.sender == pendingOwner, "not pending owner");
+        emit OwnerChanged(owner, pendingOwner);
+        owner = pendingOwner;
+        pendingOwner = address(0);
     }
 
     /// @notice Owner escape hatch: ignores policy, works even while frozen.
     function withdraw(address token, address to, uint256 amount) external onlyOwner nonReentrant {
         require(to != address(0), "to is zero");
         require(amount > 0, "amount is zero");
+        if (token != address(0)) _requireContract(token);
         _transferOut(token, to, amount);
         emit OwnerWithdraw(token, to, amount);
     }
@@ -169,6 +186,14 @@ contract AgentVault {
     }
 
     // ---------------- internals ----------------
+
+    /// @dev Calls to an address with no code succeed with empty returndata,
+    /// which the safe-transfer helpers accept (for USDT-style tokens). Without
+    /// this check, deposit/spend/withdraw against an EOA "token" would appear
+    /// to succeed and emit events while moving nothing.
+    function _requireContract(address token) internal view {
+        require(token.code.length > 0, "token has no code");
+    }
 
     function _transferOut(address token, address to, uint256 amount) internal {
         if (token == address(0)) {

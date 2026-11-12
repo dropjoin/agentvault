@@ -20,6 +20,10 @@ echo "Deploying AgentVault (agent = $AGENT_ADDRESS)..."
 OUT=$(cast send --rpc-url "$RPC" --private-key "$PRIVATE_KEY" --legacy --gas-price 100000000 --create "${BYTECODE}${ARGS#0x}" --json)
 VAULT=$(echo "$OUT" | python3 -c "import json,sys;print(json.load(sys.stdin)['contractAddress'])")
 echo "VAULT=$VAULT"
+[ -n "$VAULT" ] || { echo "ERROR: deploy returned no contract address"; exit 1; }
+# Replace any stale VAULT_ADDRESS line instead of appending a duplicate on
+# every run (a stale first entry misleads anyone reading .env by hand).
+sed -i '/^VAULT_ADDRESS=/d' .env
 echo "VAULT_ADDRESS=$VAULT" >> .env
 
 # Configure demo policy: native ETH per-tx cap 0.01, daily cap 0.025; service allowlisted.

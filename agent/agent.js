@@ -8,9 +8,29 @@ const { ethers } = require("ethers");
 const fs = require("fs");
 
 // load ../.env manually (no dotenv dependency)
-for (const line of fs.readFileSync(__dirname + "/../.env", "utf8").split("\n")) {
+const ENV_PATH = __dirname + "/../.env";
+if (!fs.existsSync(ENV_PATH)) {
+  console.error(
+    "Agent failed: ../.env not found. Copy .env.example to .env and fill in " +
+      "ARB_SEPOLIA_RPC, AGENT_PRIVATE_KEY, VAULT_ADDRESS and SERVICE_ADDRESS."
+  );
+  process.exit(1);
+}
+for (const line of fs.readFileSync(ENV_PATH, "utf8").split("\n")) {
   const m = line.match(/^([A-Z_]+)=(.*)$/);
-  if (m) process.env[m[1]] = m[2].trim();
+  if (!m) continue;
+  let v = m[2].trim();
+  // tolerate quoted values: KEY="0x..." and KEY='0x...'
+  if (v.length >= 2 && ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'")))) {
+    v = v.slice(1, -1);
+  }
+  process.env[m[1]] = v;
+}
+const REQUIRED_ENV = ["ARB_SEPOLIA_RPC", "AGENT_PRIVATE_KEY", "VAULT_ADDRESS", "SERVICE_ADDRESS"];
+const missingEnv = REQUIRED_ENV.filter((k) => !process.env[k]);
+if (missingEnv.length) {
+  console.error("Agent failed: missing required variable(s) in .env: " + missingEnv.join(", "));
+  process.exit(1);
 }
 
 const VAULT_ABI = [
@@ -30,18 +50,37 @@ async function main() {
 
   console.log("Agent address:  ", wallet.address);
   console.log("Vault:          ", process.env.VAULT_ADDRESS);
-  console.log("Frozen:         ", await vault.frozen());
-  const [perTx, daily, spent] = await vault.getPolicy(ZERO);
+  const isFrozen = await vault.frozen();
+  console.log("Frozen:         ", isFrozen);
+  const [perTx, daily, spent, configured] = await vault.getPolicy(ZERO);
   console.log(
     `Native policy:   perTx ${ethers.formatEther(perTx)} ETH, daily ${ethers.formatEther(daily)} ETH, spent today ${ethers.formatEther(spent)} ETH`
   );
   console.log("Vault balance:  ", ethers.formatEther(await vault.balanceOf(ZERO)), "ETH\n");
 
   // Job 1: pay the service 0.01 ETH for an API call — inside policy, must pass.
+  // Check the remaining daily allowance first: re-running the demo on a day
+  // where the allowance is already spent must skip cleanly, not crash.
+  const payAmount = ethers.parseEther("0.01");
+  const remaining = daily > spent ? daily - spent : 0n;
   console.log("Job 1: paying service 0.01 ETH (inside policy)...");
-  const tx1 = await vault.agentSpend(ZERO, service, ethers.parseEther("0.01"));
-  await tx1.wait();
-  console.log("  OK, tx:", tx1.hash);
+  if (!configured) {
+    console.log("  SKIPPED: no native policy is configured on the vault.");
+  } else if (isFrozen) {
+    console.log("  SKIPPED: the vault is frozen, the agent cannot spend.");
+  } else if (remaining < payAmount) {
+    console.log(
+      `  SKIPPED: only ${ethers.formatEther(remaining)} ETH of the daily cap remains (spent ${ethers.formatEther(spent)} of ${ethers.formatEther(daily)} ETH today).`
+    );
+  } else {
+    try {
+      const tx1 = await vault.agentSpend(ZERO, service, payAmount);
+      await tx1.wait();
+      console.log("  OK, tx:", tx1.hash);
+    } catch (e) {
+      console.log("  REJECTED by the vault policy:", (e.shortMessage || e.message).slice(0, 140));
+    }
+  }
 
   await sleep(2000);
 
